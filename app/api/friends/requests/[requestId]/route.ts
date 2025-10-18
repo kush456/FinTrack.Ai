@@ -3,14 +3,14 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/configs/auth/authOptions";
 import { prisma } from "@/lib/prisma";
 
-export async function PUT(req: Request, { params }: { params: { requestId: string } }) {
+export async function PUT(req: Request, { params }: { params: Promise<{ requestId: string }> }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { requestId } = params;
+    const { requestId } = await params;
     const { action } = await req.json(); // "ACCEPT" or "REJECT"
 
     if (!["ACCEPT", "REJECT"].includes(action)) {
