@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 // PATCH /api/settlements/[id] - mark as paid
-export async function PATCH({ params }: { params: { id: string } }) {
-  const id = params.id;
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   try {
     const updated = await prisma.settlement.update({
       where: { id },
