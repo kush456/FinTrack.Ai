@@ -5,9 +5,10 @@ import { getServerSession } from 'next-auth';
 // DELETE /api/groups/[id]/expenses/[expenseId] - Delete a specific group expense
 export async function DELETE(
   req: NextRequest, 
-  { params }: { params: { id: string; expenseId: string } }
+  { params }: { params: Promise<{ id: string; expenseId: string }> }
 ) {
   try {
+    const { id, expenseId } = await params;
     const session = await getServerSession();
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -24,7 +25,7 @@ export async function DELETE(
 
     // Verify user is a member of this group
     const groupMember = await prisma.groupMember.findUnique({
-      where: { groupId_userId: { groupId: params.id, userId: user.id } }
+      where: { groupId_userId: { groupId: id, userId: user.id } }
     });
 
     if (!groupMember) {
@@ -34,8 +35,8 @@ export async function DELETE(
     // Get the expense to verify it belongs to this group
     const expense = await prisma.expense.findFirst({
       where: { 
-        id: params.expenseId,
-        groupId: params.id 
+        id: expenseId,
+        groupId: id 
       },
       include: { participants: true }
     });
@@ -48,25 +49,25 @@ export async function DELETE(
     await Promise.all(expense.participants.map(async (participant) => {
       const balanceChange = Number(participant.paid) - Number(participant.share);
       await prisma.groupBalance.upsert({
-        where: { groupId_userId: { groupId: params.id, userId: participant.userId } },
+        where: { groupId_userId: { groupId: id, userId: participant.userId } },
         update: { balance: { decrement: balanceChange } },
-        create: { groupId: params.id, userId: participant.userId, balance: -balanceChange },
+        create: { groupId: id, userId: participant.userId, balance: -balanceChange },
       });
     }));
 
     // Delete the expense (this will cascade delete participants)
     await prisma.expense.delete({
-      where: { id: params.expenseId }
+      where: { id: expenseId }
     });
 
     // Recalculate settlements after deletion
     const balances = await prisma.groupBalance.findMany({
-      where: { groupId: params.id },
+      where: { groupId: id },
       select: { userId: true, balance: true },
     });
 
     // Remove previous settlements for this group
-    await prisma.settlement.deleteMany({ where: { groupId: params.id } });
+    await prisma.settlement.deleteMany({ where: { groupId: id } });
 
     // Prepare creditors and debtors
     const creditors = [];
@@ -91,7 +92,7 @@ export async function DELETE(
         settlements.push({ 
           fromUserId: debtor.userId, 
           toUserId: creditor.userId, 
-          groupId: params.id,
+          groupId: id,
           amount: amount
         });
         debtor.balance += amount;
